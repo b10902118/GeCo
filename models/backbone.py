@@ -14,14 +14,13 @@ from functools import partial
 class Backbone(nn.Module):
 
     def __init__(
-            self,
-            requires_grad: bool,
-            image_size: int,
-            model_path: str = None,
+        self,
+        requires_grad: bool,
+        image_size: int,
+        model_path: str = None,
     ):
 
         super(Backbone, self).__init__()
-
 
         vit_patch_size = 16
         image_embedding_size = image_size // vit_patch_size
@@ -48,27 +47,45 @@ class Backbone(nn.Module):
             nn.ConvTranspose2d(vit_dim, transformer_dim, kernel_size=2, stride=2),
             LayerNorm2d(transformer_dim),
             nn.GELU(),
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 8, kernel_size=2, stride=2))
+            nn.ConvTranspose2d(
+                transformer_dim, transformer_dim // 8, kernel_size=2, stride=2
+            ),
+        )
 
         self.embedding_encoder = nn.Sequential(
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(
+                transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
+            ),
             LayerNorm2d(transformer_dim // 4),
             nn.GELU(),
-            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(
+                transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2
+            ),
         )
         if model_path is not None:
 
-            checkpoint = torch.load(os.path.join(model_path, "sam_hq_vit_h.pth"), map_location="cpu"
-                                    )
-            state_dict = {k.replace("image_encoder.", ""): v for k, v in checkpoint.items() if "image_encoder" in k}
+            checkpoint = torch.load(
+                os.path.join(model_path, "sam_hq_vit_h.pth"), map_location="cpu"
+            )
+            state_dict = {
+                k.replace("image_encoder.", ""): v
+                for k, v in checkpoint.items()
+                if "image_encoder" in k
+            }
             self.backbone.load_state_dict(state_dict)
 
-            state_dict = {k.replace("mask_decoder.compress_vit_feat.", ""): v for k, v in checkpoint.items() if
-                          "compress_vit_feat" in k}
+            state_dict = {
+                k.replace("mask_decoder.compress_vit_feat.", ""): v
+                for k, v in checkpoint.items()
+                if "compress_vit_feat" in k
+            }
             self.compress_vit_feat.load_state_dict(state_dict)
 
-            state_dict = {k.replace("mask_decoder.embedding_encoder.", ""): v for k, v in checkpoint.items() if
-                          "embedding_encoder" in k}
+            state_dict = {
+                k.replace("mask_decoder.embedding_encoder.", ""): v
+                for k, v in checkpoint.items()
+                if "embedding_encoder" in k
+            }
             self.embedding_encoder.load_state_dict(state_dict)
 
             for n, param in self.named_parameters():
@@ -79,7 +96,9 @@ class Backbone(nn.Module):
         if self.backbone.pos_embed is not None:
             if self.backbone.pos_embed.shape[1:] != x.shape[1:]:
                 upsample_pos_emb = nn.UpsamplingBilinear2d(scale_factor=1.5)
-                pos_emb = upsample_pos_emb(self.backbone.pos_embed.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
+                pos_emb = upsample_pos_emb(
+                    self.backbone.pos_embed.permute(0, 3, 1, 2)
+                ).permute(0, 2, 3, 1)
             else:
                 pos_emb = self.backbone.pos_embed
             x = x + pos_emb
@@ -92,6 +111,8 @@ class Backbone(nn.Module):
         image_embeddings = self.backbone.neck(x.permute(0, 3, 1, 2))
 
         vit_features = interm_embeddings[0].permute(0, 3, 1, 2)
-        hq_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(vit_features)
+        hq_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(
+            vit_features
+        )
 
         return image_embeddings, hq_features

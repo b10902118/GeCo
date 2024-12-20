@@ -10,18 +10,21 @@ from torch import nn
 from typing import Tuple
 
 from models.regression import UpsamplingLayer
-from models.transformer import SelfCrossAttentionBlock, PrototypeAttentionBlock, ImgToPrototypeAttentionBlock
+from models.transformer import (
+    SelfCrossAttentionBlock,
+    PrototypeAttentionBlock,
+    ImgToPrototypeAttentionBlock,
+)
 
 
 class DQE(nn.Module):
     def __init__(
-            self,
-            *,
-            transformer_dim: int,
-            num_prototype_attn_steps: int,
-            num_image_attn_steps: int,
-            zero_shot: bool = False
-
+        self,
+        *,
+        transformer_dim: int,
+        num_prototype_attn_steps: int,
+        num_image_attn_steps: int,
+        zero_shot: bool = False
     ) -> None:
         """
 
@@ -34,11 +37,10 @@ class DQE(nn.Module):
         self.zero_shot = zero_shot
 
         if self.zero_shot:
-            self.image_to_prototype_attn =ImgToPrototypeAttentionBlock(
-                    embedding_dim=transformer_dim,
-                    num_heads=8,
-                )
-
+            self.image_to_prototype_attn = ImgToPrototypeAttentionBlock(
+                embedding_dim=transformer_dim,
+                num_heads=8,
+            )
 
         for _ in range(num_prototype_attn_steps):
             self.prototype_attention.append(
@@ -49,14 +51,17 @@ class DQE(nn.Module):
             )
 
         for _ in range(num_image_attn_steps):
-            self.image_attention.append(SelfCrossAttentionBlock(
-                embedding_dim=transformer_dim,
-                num_heads=8,
-            ))
+            self.image_attention.append(
+                SelfCrossAttentionBlock(
+                    embedding_dim=transformer_dim,
+                    num_heads=8,
+                )
+            )
 
         self.upscale = nn.Sequential(
             UpsamplingLayer(transformer_dim, transformer_dim),
-            UpsamplingLayer(transformer_dim, transformer_dim))
+            UpsamplingLayer(transformer_dim, transformer_dim),
+        )
         self.upscale_hq = UpsamplingLayer(transformer_dim + 32, transformer_dim)
 
     def init_weights(m):
@@ -65,15 +70,13 @@ class DQE(nn.Module):
             m.bias.data.fill_(0.01)
 
     def forward(
-            self,
-            image_embeddings: torch.Tensor,
-            image_pe: torch.Tensor,
-            prototype_embeddings: torch.Tensor,
-            hq_features: torch.Tensor
+        self,
+        image_embeddings: torch.Tensor,
+        image_pe: torch.Tensor,
+        prototype_embeddings: torch.Tensor,
+        hq_features: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-
-        """
+        """ """
         b, c, h, w = image_embeddings.shape
         image_pe = torch.repeat_interleave(image_pe, image_embeddings.shape[0], dim=0)
         if image_pe.shape[1:] != image_embeddings.shape[1:]:
@@ -84,17 +87,15 @@ class DQE(nn.Module):
         src = image_embeddings
 
         if self.zero_shot:
-            prototype_embeddings = self.image_to_prototype_attn(image_f=src,
-                                                                prototypes=prototype_embeddings)
+            prototype_embeddings = self.image_to_prototype_attn(
+                image_f=src, prototypes=prototype_embeddings
+            )
 
         for layer in self.prototype_attention:
-            src = layer(image_f=src,
-                        prototypes=prototype_embeddings)
+            src = layer(image_f=src, prototypes=prototype_embeddings)
 
         for layer in self.image_attention:
-            src = layer(image_f=src,
-                        adapted_image_f=image_embeddings,
-                        pos_enc=image_pe)
+            src = layer(image_f=src, adapted_image_f=image_embeddings, pos_enc=image_pe)
         src = src.transpose(1, 2).view(b, c, h, w)
         src = self.upscale(src)
         src = torch.cat([src, hq_features], dim=1)

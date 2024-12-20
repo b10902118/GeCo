@@ -9,7 +9,9 @@ def boxes_with_scores(density_map, tlrb, sort=False, batch_thresh=None):
 
     pooled = F.max_pool2d(density_map, 3, 1, 1)
     if batch_thresh is None:
-        batch_thresh = torch.median(density_map.reshape(B, -1), dim=-1).values.view(B, C, 1, 1)
+        batch_thresh = torch.median(density_map.reshape(B, -1), dim=-1).values.view(
+            B, C, 1, 1
+        )
 
     mask = (pooled == density_map) & (density_map > batch_thresh)
 
@@ -37,13 +39,13 @@ def boxes_with_scores(density_map, tlrb, sort=False, batch_thresh=None):
             bbox_xyxy = bbox_xyxy[perm]
             ref_points = ref_points[perm]
 
-        out_batch.append({
-            "pred_boxes": bbox_xyxy.unsqueeze(0),
-            "box_v": bbox_scores.unsqueeze(0)
-        })
+        out_batch.append(
+            {"pred_boxes": bbox_xyxy.unsqueeze(0), "box_v": bbox_scores.unsqueeze(0)}
+        )
         ref_points_batch.append(ref_points.T)
 
     return out_batch, ref_points_batch
+
 
 # modified from torchvision to also return the union
 def box_iou(boxes1, boxes2):
@@ -86,11 +88,9 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-
-
 class BoxList:
-    def __init__(self, box, image_size, mode='xyxy'):
-        device = box.device if hasattr(box, 'device') else 'cpu'
+    def __init__(self, box, image_size, mode="xyxy"):
+        device = box.device if hasattr(box, "device") else "cpu"
         if torch.is_tensor(box):
             box = torch.as_tensor(box, dtype=torch.float32, device=device)
         else:
@@ -108,11 +108,11 @@ class BoxList:
 
         x_min, y_min, x_max, y_max = self.split_to_xyxy()
 
-        if mode == 'xyxy':
+        if mode == "xyxy":
             box = torch.cat([x_min, y_min, x_max, y_max], -1)
             box = BoxList(box, self.size, mode=mode)
 
-        elif mode == 'xywh':
+        elif mode == "xywh":
             remove = 1
             box = torch.cat(
                 [x_min, y_min, x_max - x_min + remove, y_max - y_min + remove], -1
@@ -130,23 +130,23 @@ class BoxList:
     def area(self):
         box = self.box
 
-        if self.mode == 'xyxy':
+        if self.mode == "xyxy":
             remove = 1
 
             area = (box[:, 2] - box[:, 0] + remove) * (box[:, 3] - box[:, 1] + remove)
 
-        elif self.mode == 'xywh':
+        elif self.mode == "xywh":
             area = box[:, 2] * box[:, 3]
 
         return area
 
     def split_to_xyxy(self):
-        if self.mode == 'xyxy':
+        if self.mode == "xyxy":
             x_min, y_min, x_max, y_max = self.box.split(1, dim=-1)
 
             return x_min, y_min, x_max, y_max
 
-        elif self.mode == 'xywh':
+        elif self.mode == "xywh":
             remove = 1
             x_min, y_min, w, h = self.box.split(1, dim=-1)
 
@@ -188,7 +188,7 @@ class BoxList:
         scaled_y_min = y_min * ratio_h
         scaled_y_max = y_max * ratio_h
         scaled = torch.cat([scaled_x_min, scaled_y_min, scaled_x_max, scaled_y_max], -1)
-        box = BoxList(scaled, size, mode='xyxy')
+        box = BoxList(scaled, size, mode="xyxy")
 
         for k, v in self.fields.items():
             if not isinstance(v, torch.Tensor):
@@ -222,7 +222,7 @@ class BoxList:
         box = BoxList(self.box.to(device), self.size, self.mode)
 
         for k, v in self.fields.items():
-            if hasattr(v, 'to'):
+            if hasattr(v, "to"):
                 v = v.to(device)
 
             box.fields[k] = v
@@ -230,16 +230,14 @@ class BoxList:
         return box
 
 
-
 def compute_location(features):
     locations = []
     _, _, height, width = features.shape
-    location_per_level = compute_location_per_level(
-        height, width, 1, features.device
-    )
+    location_per_level = compute_location_per_level(height, width, 1, features.device)
     locations.append(location_per_level)
 
     return locations
+
 
 def compute_location_per_level(height, width, stride, device):
     shift_x = torch.arange(

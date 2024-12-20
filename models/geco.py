@@ -13,16 +13,16 @@ from torchvision.transforms import Resize
 class GeCo(nn.Module):
 
     def __init__(
-            self,
-            image_size: int,
-            num_objects: int,
-            emb_dim: int,
-            num_heads: int,
-            kernel_dim: int,
-            train_backbone: bool,
-            reduction: int,
-            zero_shot: bool,
-            model_path: str
+        self,
+        image_size: int,
+        num_objects: int,
+        emb_dim: int,
+        num_heads: int,
+        kernel_dim: int,
+        train_backbone: bool,
+        reduction: int,
+        zero_shot: bool,
+        model_path: str,
     ):
         super(GeCo, self).__init__()
 
@@ -35,7 +35,9 @@ class GeCo(nn.Module):
         self.num_heads = num_heads
         self.num_classes = 1
         self.model_path = model_path
-        self.backbone = Backbone(requires_grad=train_backbone, image_size=image_size, model_path=model_path)
+        self.backbone = Backbone(
+            requires_grad=train_backbone, image_size=image_size, model_path=model_path
+        )
 
         self.class_embed = nn.Sequential(nn.Linear(emb_dim, 1), nn.LeakyReLU())
         self.bbox_embed = MLP(emb_dim, emb_dim, 4, 3)
@@ -59,10 +61,9 @@ class GeCo(nn.Module):
             nn.ReLU(),
             nn.Linear(64, emb_dim),
             nn.ReLU(),
-            nn.Linear(emb_dim, 1 ** 2 * emb_dim)
+            nn.Linear(emb_dim, 1**2 * emb_dim),
         )
         self.resize = Resize((512, 512))
-
 
     def forward(self, x, bboxes):
         num_objects = bboxes.size(1) if not self.zero_shot else self.num_objects
@@ -72,28 +73,36 @@ class GeCo(nn.Module):
 
         bs, c, h, w = src.size()
 
-        bboxes_roi = torch.cat([
-            torch.arange(
-                bs, requires_grad=False
-            ).to(bboxes.device).repeat_interleave(self.num_objects).reshape(-1, 1),
-            bboxes.flatten(0, 1),
-        ], dim=1)
+        bboxes_roi = torch.cat(
+            [
+                torch.arange(bs, requires_grad=False)
+                .to(bboxes.device)
+                .repeat_interleave(self.num_objects)
+                .reshape(-1, 1),
+                bboxes.flatten(0, 1),
+            ],
+            dim=1,
+        )
 
         # Roi align
-        exemplars = roi_align(
-            src,
-            boxes=bboxes_roi, output_size=self.kernel_dim,
-            spatial_scale=1.0 / self.reduction, aligned=True
-        ).permute(0, 2, 3, 1).reshape(bs, self.num_objects * self.kernel_dim ** 2, self.emb_dim)
+        exemplars = (
+            roi_align(
+                src,
+                boxes=bboxes_roi,
+                output_size=self.kernel_dim,
+                spatial_scale=1.0 / self.reduction,
+                aligned=True,
+            )
+            .permute(0, 2, 3, 1)
+            .reshape(bs, self.num_objects * self.kernel_dim**2, self.emb_dim)
+        )
 
         box_hw = torch.zeros(bboxes.size(0), bboxes.size(1), 2).to(bboxes.device)
         box_hw[:, :, 0] = bboxes[:, :, 2] - bboxes[:, :, 0]
         box_hw[:, :, 1] = bboxes[:, :, 3] - bboxes[:, :, 1]
 
         # Encode shape
-        shape = self.shape_or_objectness(box_hw).reshape(
-            bs, -1, self.emb_dim
-        )
+        shape = self.shape_or_objectness(box_hw).reshape(bs, -1, self.emb_dim)
         prototype_embeddings = torch.cat([exemplars, shape], dim=1)
 
         # adapt image feature with prototypes
@@ -101,19 +110,19 @@ class GeCo(nn.Module):
             image_embeddings=src,
             image_pe=self.prompt_encoder.get_dense_pe(),
             prototype_embeddings=prototype_embeddings,
-            hq_features=src_hq
+            hq_features=src_hq,
         )
 
         # Predict class [fg, bg] and l,r,t,b
         bs, c, w, h = adapted_f.shape
         adapted_f = adapted_f.view(bs, self.emb_dim, -1).permute(0, 2, 1)
         centerness = self.class_embed(adapted_f).view(bs, w, h, 1).permute(0, 3, 1, 2)
-        outputs_coord = self.bbox_embed(adapted_f).sigmoid().view(bs, w, h, 4).permute(0, 3, 1, 2)
+        outputs_coord = (
+            self.bbox_embed(adapted_f).sigmoid().view(bs, w, h, 4).permute(0, 3, 1, 2)
+        )
         outputs, ref_points = boxes_with_scores(centerness, outputs_coord)
 
         return outputs, ref_points, centerness, outputs_coord
-
-
 
 
 def build_model(args):
@@ -128,6 +137,5 @@ def build_model(args):
         kernel_dim=args.kernel_dim,
         train_backbone=args.backbone_lr > 0,
         reduction=args.reduction,
-        model_path=args.model_path
-
+        model_path=args.model_path,
     )

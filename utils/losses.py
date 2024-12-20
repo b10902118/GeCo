@@ -17,7 +17,7 @@ class ObjectNormalizedL2Loss(nn.Module):
 class Detection_criterion(nn.Module):
 
     def __init__(
-            self, sizes, iou_loss_type, center_sample, fpn_strides, pos_radius, aux=False
+        self, sizes, iou_loss_type, center_sample, fpn_strides, pos_radius, aux=False
     ):
         super().__init__()
 
@@ -53,7 +53,9 @@ class Detection_criterion(nn.Module):
 
         for level in range(len(points)):
             label_level_first.append(
-                torch.cat([label_per_img[level] for label_per_img in label], 0).to(points[0].device)
+                torch.cat([label_per_img[level] for label_per_img in label], 0).to(
+                    points[0].device
+                )
             )
             box_target_level_first.append(
                 torch.cat(
@@ -114,7 +116,7 @@ class Detection_criterion(nn.Module):
         return is_in_boxes
 
     def compute_target_for_location(
-            self, locations, targets, sizes_of_interest, n_point_per_level
+        self, locations, targets, sizes_of_interest, n_point_per_level
     ):
         labels = []
         box_targets = []
@@ -122,7 +124,7 @@ class Detection_criterion(nn.Module):
         for i in range(len(targets)):
             targets_per_img = targets[i]
             targets_per_img = targets_per_img.clip(remove_empty=True)
-            assert targets_per_img.mode == 'xyxy'
+            assert targets_per_img.mode == "xyxy"
             targets_per_img = targets_per_img[:50]
             bboxes = targets_per_img.box
 
@@ -147,8 +149,8 @@ class Detection_criterion(nn.Module):
             max_box_targets_per_img = box_targets_per_img.max(2)[0]
 
             is_cared_in_level = (
-                                        max_box_targets_per_img >= sizes_of_interest[:, [0]]
-                                ) & (max_box_targets_per_img <= sizes_of_interest[:, [1]])
+                max_box_targets_per_img >= sizes_of_interest[:, [0]]
+            ) & (max_box_targets_per_img <= sizes_of_interest[:, [1]])
 
             locations_to_gt_area = area[None].repeat(len(locations), 1)
             locations_to_gt_area[is_in_boxes == 0] = INF
@@ -160,7 +162,9 @@ class Detection_criterion(nn.Module):
                 range(len(locations)), locations_to_gt_id
             ]
 
-            labels_per_img = labels_per_img.to(locations_to_gt_id.device)[locations_to_gt_id]
+            labels_per_img = labels_per_img.to(locations_to_gt_id.device)[
+                locations_to_gt_id
+            ]
             labels_per_img[locations_to_min_area == INF] = 0
 
             labels.append(labels_per_img)
@@ -172,7 +176,7 @@ class Detection_criterion(nn.Module):
         left_right = box_targets[:, [0, 2]]
         top_bottom = box_targets[:, [1, 3]]
         centerness = (left_right.min(-1)[0] / left_right.max(-1)[0]) * (
-                top_bottom.min(-1)[0] / top_bottom.max(-1)[0]
+            top_bottom.min(-1)[0] / top_bottom.max(-1)[0]
         )
 
         return torch.sqrt(centerness)
@@ -207,6 +211,8 @@ class Detection_criterion(nn.Module):
 
 
 INF = 100000000
+
+
 class IOULoss(nn.Module):
     def __init__(self, loc_loss_type):
         super().__init__()
@@ -234,10 +240,10 @@ class IOULoss(nn.Module):
 
         ious = (area_intersect + 1) / (area_union + 1)
 
-        if self.loc_loss_type == 'iou':
+        if self.loc_loss_type == "iou":
             loss = -torch.log(ious)
 
-        elif self.loc_loss_type == 'giou':
+        elif self.loc_loss_type == "giou":
             g_w_intersect = torch.max(pred_left, target_left) + torch.max(
                 pred_right, target_right
             )
@@ -257,14 +263,14 @@ class IOULoss(nn.Module):
 
 
 class SetCriterion(nn.Module):
-    """ This class computes the loss for DETR.
+    """This class computes the loss for DETR.
     The process happens in two steps:
         1) we compute hungarian assignment between ground truth boxes and the outputs of the model
         2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
     """
 
     def __init__(self, num_classes, matcher, weight_dict, losses, focal_alpha=0.25):
-        """ Create the criterion.
+        """Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
             matcher: module able to compute a matching between targets and proposals
@@ -279,61 +285,89 @@ class SetCriterion(nn.Module):
         self.losses = losses
         self.focal_alpha = focal_alpha
 
-    def loss_boxes(self, outputs, targets, indices, num_boxes, centerness, centerness_gt, mask):
+    def loss_boxes(
+        self, outputs, targets, indices, num_boxes, centerness, centerness_gt, mask
+    ):
         """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
-           targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
-           The target boxes are expected in format (center_x, center_y, h, w), normalized by the image size.
+        targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
+        The target boxes are expected in format (center_x, center_y, h, w), normalized by the image size.
         """
-        assert 'pred_boxes' in outputs
+        assert "pred_boxes" in outputs
         idx = self._get_src_permutation_idx(indices)
-        src_boxes = outputs['pred_boxes'][idx]
-        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        src_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat(
+            [t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0
+        )
 
-        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
 
         losses = {}
-        losses['loss_bbox'] = loss_bbox.sum() / num_boxes
+        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
-        loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
-            (src_boxes),
-            (target_boxes)))
-        losses['loss_giou'] = loss_giou.sum() / num_boxes
+        loss_giou = 1 - torch.diag(
+            box_ops.generalized_box_iou((src_boxes), (target_boxes))
+        )
+        losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
-    def ce_loss(self, outputs, targets, indices, num_boxes, centerness, centerness_gt, mask):
+    def ce_loss(
+        self, outputs, targets, indices, num_boxes, centerness, centerness_gt, mask
+    ):
         """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
-           targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
-           The target boxes are expected in format (center_x, center_y, h, w), normalized by the image size.
+        targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
+        The target boxes are expected in format (center_x, center_y, h, w), normalized by the image size.
         """
 
-        l2 = ((centerness[mask > 0] - centerness_gt[mask > 0]) ** 2)
+        l2 = (centerness[mask > 0] - centerness_gt[mask > 0]) ** 2
         losses = {}
-        losses['loss_l2'] = l2.sum() / num_boxes
+        losses["loss_l2"] = l2.sum() / num_boxes
         return losses
 
     def _get_src_permutation_idx(self, indices):
         # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
+        batch_idx = torch.cat(
+            [torch.full_like(src, i) for i, (src, _) in enumerate(indices)]
+        )
         src_idx = torch.cat([src for (src, _) in indices])
         return batch_idx, src_idx
 
     def _get_tgt_permutation_idx(self, indices):
         # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
+        batch_idx = torch.cat(
+            [torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)]
+        )
         tgt_idx = torch.cat([tgt for (_, tgt) in indices])
         return batch_idx, tgt_idx
 
-    def get_loss(self, loss, outputs, targets, indices, num_boxes, centerness, centerness_gt, mask, **kwargs):
-        loss_map = {
-            'bboxes': self.loss_boxes,
-            'ce': self.ce_loss
-        }
-        assert loss in loss_map, f'do you really want to compute {loss} loss?'
-        return loss_map[loss](outputs, targets, indices, num_boxes, centerness, centerness_gt, mask, **kwargs)
+    def get_loss(
+        self,
+        loss,
+        outputs,
+        targets,
+        indices,
+        num_boxes,
+        centerness,
+        centerness_gt,
+        mask,
+        **kwargs,
+    ):
+        loss_map = {"bboxes": self.loss_boxes, "ce": self.ce_loss}
+        assert loss in loss_map, f"do you really want to compute {loss} loss?"
+        return loss_map[loss](
+            outputs,
+            targets,
+            indices,
+            num_boxes,
+            centerness,
+            centerness_gt,
+            mask,
+            **kwargs,
+        )
 
-
-    def generate_centerness_gt(self, indices, FN_idx, FP_idx, outputs, targets, centerness, ref_points):
-        FN_bboxes = targets[0]['boxes'][FN_idx] * centerness.shape[1]
+    def generate_centerness_gt(
+        self, indices, FN_idx, FP_idx, outputs, targets, centerness, ref_points
+    ):
+        FN_bboxes = targets[0]["boxes"][FN_idx] * centerness.shape[1]
 
         centerness_gt = torch.zeros_like(centerness)
         mask = torch.zeros_like(centerness)
@@ -344,8 +378,16 @@ class SetCriterion(nn.Module):
 
         # FN -> Non-matched GT bboxes get 1 in center of bbox
         if len(FN_bboxes) > 0:
-            FN_y_loc = torch.clamp(((FN_bboxes[:, 3] + FN_bboxes[:, 1]) / 2).int(), min=0, max=centerness.shape[1] - 1)
-            FN_x_loc = torch.clamp(((FN_bboxes[:, 2] + FN_bboxes[:, 0]) / 2).int(), min=0, max=centerness.shape[1] - 1)
+            FN_y_loc = torch.clamp(
+                ((FN_bboxes[:, 3] + FN_bboxes[:, 1]) / 2).int(),
+                min=0,
+                max=centerness.shape[1] - 1,
+            )
+            FN_x_loc = torch.clamp(
+                ((FN_bboxes[:, 2] + FN_bboxes[:, 0]) / 2).int(),
+                min=0,
+                max=centerness.shape[1] - 1,
+            )
 
             centerness_gt[0][FN_y_loc, FN_x_loc] = 1
             mask[0][FN_y_loc, FN_x_loc] = 1
@@ -355,22 +397,29 @@ class SetCriterion(nn.Module):
         centerness_gt[0][TP_locs[:, 0], TP_locs[:, 1]] = 1
         mask[0][TP_locs[:, 0], TP_locs[:, 1]] = 1
 
-        if centerness_gt.sum() < targets[0]['boxes'].shape[0]:
+        if centerness_gt.sum() < targets[0]["boxes"].shape[0]:
             centerness_gt = torch.zeros_like(centerness)
             mask = torch.ones_like(centerness)
-            FN_bboxes = targets[0]['boxes'] * centerness.shape[1]
+            FN_bboxes = targets[0]["boxes"] * centerness.shape[1]
 
-            FN_y_loc = torch.clamp(((FN_bboxes[:, 3] + FN_bboxes[:, 1]) / 2).int(), min=0, max=centerness.shape[1] - 1)
-            FN_x_loc = torch.clamp(((FN_bboxes[:, 2] + FN_bboxes[:, 0]) / 2).int(), min=0, max=centerness.shape[1] - 1)
+            FN_y_loc = torch.clamp(
+                ((FN_bboxes[:, 3] + FN_bboxes[:, 1]) / 2).int(),
+                min=0,
+                max=centerness.shape[1] - 1,
+            )
+            FN_x_loc = torch.clamp(
+                ((FN_bboxes[:, 2] + FN_bboxes[:, 0]) / 2).int(),
+                min=0,
+                max=centerness.shape[1] - 1,
+            )
 
             centerness_gt[0][FN_y_loc, FN_x_loc] = 1
             mask[0][FN_y_loc, FN_x_loc] = 1
 
         return centerness_gt, mask
 
-
     def forward(self, outputs, targets, centerness, ref_points):
-        """ This performs the loss computation.
+        """This performs the loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the model for the format
              targets: list of dicts, such that len(targets) == batch_size.
@@ -382,54 +431,70 @@ class SetCriterion(nn.Module):
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
-        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
+        num_boxes = torch.as_tensor(
+            [num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device
+        )
 
         num_boxes = torch.clamp(num_boxes, min=1).item()
 
-        centerness_gt, mask = self.generate_centerness_gt(indices, FN_idx, FP_idx, outputs, targets, centerness,
-                                                          ref_points)
+        centerness_gt, mask = self.generate_centerness_gt(
+            indices, FN_idx, FP_idx, outputs, targets, centerness, ref_points
+        )
 
         # Compute all the requested losses
         losses = {}
         for loss in self.losses:
             kwargs = {}
             losses.update(
-                self.get_loss(loss, outputs, targets, indices, num_boxes, centerness, centerness_gt, mask, **kwargs))
+                self.get_loss(
+                    loss,
+                    outputs,
+                    targets,
+                    indices,
+                    num_boxes,
+                    centerness,
+                    centerness_gt,
+                    mask,
+                    **kwargs,
+                )
+            )
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if 'aux_outputs' in outputs:
-            for i, aux_outputs in enumerate(outputs['aux_outputs']):
+        if "aux_outputs" in outputs:
+            for i, aux_outputs in enumerate(outputs["aux_outputs"]):
                 indices = self.matcher(aux_outputs, targets)
                 for loss in self.losses:
-                    if loss == 'masks':
+                    if loss == "masks":
                         # Intermediate masks losses are too costly to compute, we ignore them.
                         continue
                     kwargs = {}
-                    if loss == 'labels':
+                    if loss == "labels":
                         # Logging is enabled only for the last layer
-                        kwargs['log'] = False
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
-                    l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
+                        kwargs["log"] = False
+                    l_dict = self.get_loss(
+                        loss, aux_outputs, targets, indices, num_boxes, **kwargs
+                    )
+                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-        if 'enc_outputs' in outputs:
-            enc_outputs = outputs['enc_outputs']
+        if "enc_outputs" in outputs:
+            enc_outputs = outputs["enc_outputs"]
             bin_targets = copy.deepcopy(targets)
             for bt in bin_targets:
-                bt['labels'] = torch.zeros_like(bt['labels'])
+                bt["labels"] = torch.zeros_like(bt["labels"])
             indices = self.matcher(enc_outputs, bin_targets)
             for loss in self.losses:
-                if loss == 'masks':
+                if loss == "masks":
                     # Intermediate masks losses are too costly to compute, we ignore them.
                     continue
                 kwargs = {}
-                if loss == 'labels':
+                if loss == "labels":
                     # Logging is enabled only for the last layer
-                    kwargs['log'] = False
-                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes, **kwargs)
-                l_dict = {k + f'_enc': v for k, v in l_dict.items()}
+                    kwargs["log"] = False
+                l_dict = self.get_loss(
+                    loss, enc_outputs, bin_targets, indices, num_boxes, **kwargs
+                )
+                l_dict = {k + f"_enc": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
         return losses
-
-

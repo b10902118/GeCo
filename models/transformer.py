@@ -8,12 +8,11 @@ from torch import nn
 
 class SelfCrossAttentionBlock(nn.Module):
     def __init__(
-            self,
-            embedding_dim: int,
-            num_heads: int,
+        self,
+        embedding_dim: int,
+        num_heads: int,
     ) -> None:
-        """
-        """
+        """ """
         super().__init__()
         self.self_attention = Attention(embedding_dim, num_heads)
         self.cross_attention = Attention(embedding_dim, num_heads)
@@ -21,39 +20,44 @@ class SelfCrossAttentionBlock(nn.Module):
         self.norm2 = nn.LayerNorm(embedding_dim)
 
     def forward(
-            self, image_f: Tensor, adapted_image_f: Tensor, pos_enc: Tensor,
+        self,
+        image_f: Tensor,
+        adapted_image_f: Tensor,
+        pos_enc: Tensor,
     ) -> Tuple[Tensor, Tensor]:
-        adapted_image_f = adapted_image_f + self.self_attention(q=adapted_image_f + pos_enc,
-                                                                k=adapted_image_f + pos_enc,
-                                                                v=adapted_image_f + pos_enc)
+        adapted_image_f = adapted_image_f + self.self_attention(
+            q=adapted_image_f + pos_enc,
+            k=adapted_image_f + pos_enc,
+            v=adapted_image_f + pos_enc,
+        )
         adapted_image_f = self.norm1(adapted_image_f)
-        adapted_image_f = adapted_image_f + self.cross_attention(q=adapted_image_f + pos_enc,
-                                                                 k=image_f + pos_enc,
-                                                                 v=image_f + pos_enc)
+        adapted_image_f = adapted_image_f + self.cross_attention(
+            q=adapted_image_f + pos_enc, k=image_f + pos_enc, v=image_f + pos_enc
+        )
         adapted_image_f = self.norm2(adapted_image_f)
         return adapted_image_f
 
 
 class PrototypeAttentionBlock(nn.Module):
     def __init__(
-            self,
-            embedding_dim: int,
-            num_heads: int,
+        self,
+        embedding_dim: int,
+        num_heads: int,
     ) -> None:
-        """
-        """
+        """ """
         super().__init__()
         self.cross_attention = Attention(embedding_dim, num_heads)
         self.norm = nn.LayerNorm(embedding_dim)
 
     def forward(
-            self, image_f: Tensor, prototypes: Tensor,
+        self,
+        image_f: Tensor,
+        prototypes: Tensor,
     ) -> Tuple[Tensor, Tensor]:
-        image_f = image_f + self.cross_attention(q=image_f,
-                                                 k=prototypes,
-                                                 v=prototypes)
+        image_f = image_f + self.cross_attention(q=image_f, k=prototypes, v=prototypes)
         image_f = self.norm(image_f)
         return image_f
+
 
 class ImgToPrototypeAttentionBlock(nn.Module):
     def __init__(
@@ -61,22 +65,22 @@ class ImgToPrototypeAttentionBlock(nn.Module):
         embedding_dim: int,
         num_heads: int,
     ) -> None:
-        """
-        """
+        """ """
         super().__init__()
-        self.cross_attention =  Attention(embedding_dim, num_heads)
+        self.cross_attention = Attention(embedding_dim, num_heads)
         self.norm = nn.LayerNorm(embedding_dim)
 
     def forward(
-        self, image_f: Tensor, prototypes: Tensor,
+        self,
+        image_f: Tensor,
+        prototypes: Tensor,
     ) -> Tuple[Tensor, Tensor]:
 
-        prototypes = prototypes + self.cross_attention(q=prototypes,
-                                          k=image_f,
-                                          v=image_f)
+        prototypes = prototypes + self.cross_attention(
+            q=prototypes, k=image_f, v=image_f
+        )
         prototypes = self.norm(prototypes)
         return prototypes
-
 
 
 class Attention(nn.Module):
@@ -86,16 +90,18 @@ class Attention(nn.Module):
     """
 
     def __init__(
-            self,
-            embedding_dim: int,
-            num_heads: int,
-            downsample_rate: int = 1,
+        self,
+        embedding_dim: int,
+        num_heads: int,
+        downsample_rate: int = 1,
     ) -> None:
         super().__init__()
         self.embedding_dim = embedding_dim
         self.internal_dim = embedding_dim // downsample_rate
         self.num_heads = num_heads
-        assert self.internal_dim % num_heads == 0, "num_heads must divide embedding_dim."
+        assert (
+            self.internal_dim % num_heads == 0
+        ), "num_heads must divide embedding_dim."
 
         self.q_proj = nn.Linear(embedding_dim, self.internal_dim)
         self.k_proj = nn.Linear(embedding_dim, self.internal_dim)
